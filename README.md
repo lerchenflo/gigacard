@@ -1,2 +1,2 @@
-# gigacard
+# Gigacard
 Gigacard library
