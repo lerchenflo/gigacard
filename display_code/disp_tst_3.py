@@ -29,7 +29,7 @@ spi1_miso=8     #not use
 st7789_res = 12
 st7789_dc  = 16
 disp_width = 240
-disp_height = 240
+disp_height = 280
 CENTER_Y = int(disp_width/2)
 CENTER_X = int(disp_height/2)
 
@@ -64,8 +64,8 @@ for i in range(255, 0, -1):
 
 '''
 display.fill(st7789.BLACK)
-display.text(font2, "Hello!", 10, 10)
-display.text(font2, "RPi Pico", 10, 40)
+display.text(font2, "Hello World!", 10, 10)
+display.text(font2, "Gigacard loft", 10, 40)
 display.text(font2, "MicroPython", 10, 70)
 display.text(font1, "ST7789 SPI 240*240 IPS", 10, 100)
 display.text(font1, "https://github.com/", 10, 110)
