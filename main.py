@@ -2,11 +2,13 @@ from gigacardlib import Gigacard
 from gigacardlib import Gcrotaryenc
 from gigacardlib import Gcdisplay
 import time
+import machine
+import utime
 
 from fonts import vga2_8x8 as font1
 from fonts import vga1_16x32 as font2
 
-import italien_bild as bild
+#import italien_bild as bild
 
 gigacard = Gigacard()
 #gigacard._rotaryenc.startlistening()
@@ -14,9 +16,8 @@ gigacard = Gigacard()
 #ADC test
 #gigacard._DAC.set_voltage(0, 2)
 #gigacard.setDACvoltage(0,2)
+'''
 
-import machine
-import utime
 display = Gcdisplay()
 #display.st7789.text(font2, "Hello World", 10, 10)
 #display.st7789.bitmap(bild, 20, 20, 0)
@@ -28,10 +29,10 @@ display.st7789.text(font1, "Schneaggchat for Gigacard bald", 0, 170)
 #for x in range(25):
 #    display.print_display("Zeile :" + str(x))    
 
-
+'''
 gigacard._rotaryenc.stepsize = 50
 gigacard._RGBLED._brightness = 1
-'''
+
 while True:
     print("Counter:", gigacard._rotaryenc.counter)
     #print("tastervalue", gigacard._rotaryenc.buttonpressed)
@@ -56,7 +57,7 @@ while True:
     time.sleep(1)
     counter+= 1
     
-'''
+
 
     
     
