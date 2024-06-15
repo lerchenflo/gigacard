@@ -5,7 +5,7 @@ import neopixel
 import machine
 import time
 import utime
-
+import array
 
 #from rotary import Rotary
 from machine import Pin, SPI
@@ -90,7 +90,7 @@ class Gigacard():
         #Rotary Encoder Library initialisieren
         self._rotaryenc = Gcrotaryenc()
         self._rotaryenc.startlistening()
-        #this.display = Gigacarddisplay()
+        self._display = Gcdisplay()
         self._ADC = GcADC()
         self._DAC = GcDAC()
         self._RGBLED = GcRGBLED()
@@ -98,7 +98,6 @@ class Gigacard():
         
 
     def selftest(self):
-        
         self._RGBLED.test()
         self.LEDtest()
         
@@ -109,7 +108,8 @@ class Gigacard():
         
     def setRGBcolor(self, Red, Green, Blue):
         self._RGBLED.setcolor(Red,Green,Blue)
-
+    def setRGBbrightness(self, brightness):
+        self._RGBLED.setbrightness(brightness)
 
     #Testfunktion für die 8 LEDs
     def LEDtest(self):
@@ -137,10 +137,20 @@ class Gcdisplay():
     def print_display(self, text):
         self.st7789.text(font1, text, 15, self.linepx)
         self.linepx += 10
+        
+    def print_display_xy(self, x, y, text):
+        self.st7789.text(font1, text, y, x)
 
 class Gcrotaryenc():
     global counter
     global buttonpressed
+    
+    #Funktion über dem Konstruktor, denn sie muss beim Ausführen des Konstruktors aufgerufen werden
+    def startlistening(self):
+        self.rotary_pinA.irq(handler=self.rotary_callback, trigger=machine.Pin.IRQ_FALLING)
+        self.rotary_switch.irq(handler=self.switch_callback, trigger=machine.Pin.IRQ_RISING | machine.Pin.IRQ_FALLING)
+    
+    
     def __init__(self, stepsize=1):
         self.inttime = 0
         self.buttonpressed = False
@@ -149,6 +159,7 @@ class Gcrotaryenc():
         self.rotary_pinA = machine.Pin(20, machine.Pin.IN, machine.Pin.PULL_UP)
         self.rotary_pinB = machine.Pin(21, machine.Pin.IN, machine.Pin.PULL_UP)
         self.rotary_switch = machine.Pin(22, machine.Pin.IN, machine.Pin.PULL_UP)
+        self.startlistening()
         
 
     # Funktion zur Überwachung der Drehrichtung
@@ -170,9 +181,6 @@ class Gcrotaryenc():
         else:
             self.buttonpressed = True
         
-    def startlistening(self):
-        self.rotary_pinA.irq(handler=self.rotary_callback, trigger=machine.Pin.IRQ_FALLING)
-        self.rotary_switch.irq(handler=self.switch_callback, trigger=machine.Pin.IRQ_RISING | machine.Pin.IRQ_FALLING)
 
 
 
@@ -239,30 +247,119 @@ class GcDAC():
         self.spi.write(bytes([(command >> 8) & 0xFF, command & 0xFF]))  # Send command bytes
         self.dac_cs.value(1)  # Set CS high to end communication
         
+    
+    def generate_sinus(self, amplitude = 1, frequency = 50, duration = 20): # Amplitude in Volt, frequenz in Hertz, Dauer in Sekunden
+        self._amplitude = amplitude
+        self._frequency = frequency
+        self._duration = duration
+        self._sample_rate = 1000 # Samples pro Sekunde
+        self._period = 1.0 / frequency # Periodendauer als Float
+        self._samplecount = int(sample_rate * period) #Anzahl von Samples insgesammt
+        self.start_time = time.ticks_ms()
+        
+        while time.ticks_diff(time.ticks_ms(), self.start_time) < duration * 1000:
+            for i in range(sample_count):
+                angle = 2 * math.pi * i / sample_count
+                voltage = (amplitude / 2) * (1 + math.sin(angle))  # Offset hinzugefügt, um positive Spannung zu haben
+                self.set_voltage(voltage)
+                time.sleep(1 / sample_rate)
+    
+    def generate_sawtooth(self, amplitude=1, frequency=50, duration=20):
+        self._amplitude = amplitude
+        self._frequency = frequency
+        self._duration = duration
+        self._sample_rate = 1000  # Samples pro Sekunde
+        self._period = 1.0 / frequency  # Periodendauer als Float
+        self._sample_count = int(self._sample_rate * self._period)  # Anzahl von Samples insgesamt
+        self.start_time = time.ticks_ms()
+        
+        while time.ticks_diff(time.ticks_ms(), self.start_time) < duration * 1000:
+            for i in range(self._sample_count):
+                voltage = (amplitude / self._sample_count) * i  # Lineare Zunahme von 0 bis Amplitude
+                self.set_voltage(voltage)
+                time.sleep(1 / self._sample_rate)
+    
+    def generate_pwm(self, amplitude=1, frequency=50, duration=20, dutycycle=50):
+        self._amplitude = amplitude
+        self._frequency = frequency
+        self._duration = duration
+        self._dutycycle = dutycycle
+        self.start_time = time.ticks_ms()
+    
+    
+        
+class GcIO():
+    def __init__(self):
+        self._button1 = machine.Pin(taster_1, machine.Pin.IN, machine.Pin.PULL_DOWN)
+        self._button2 = machine.Pin(taster_2, machine.Pin.IN, machine.Pin.PULL_DOWN)
+        self._button3 = machine.Pin(taster_3, machine.Pin.IN, machine.Pin.PULL_DOWN)
+        self._button4 = machine.Pin(taster_4, machine.Pin.IN, machine.Pin.PULL_DOWN)
+        
+    
+    def getbuttonstatus(self, button):
+        if button == taster_1:
+            return self._button1.value()
+        elif button == taster_2:
+            return self._button2.value()
+        elif button == taster_3:
+            return self._button3.value()
+        elif button == taster_4:
+            return self._button4.value()
+        else:
+            raise ValueError("Not available button selected")
+    
+    def set_pullup(self, pin):
+        machine.Pin(pin, machine.Pin.PULL_UP)
+        
+    def set_pulldown(self, pin):
+        machine.Pin(pin, machine.Pin.PULL_DOWN)
+
+    def set_input(self, pin):
+        machine.Pin(pin, machine.Pin.IN)
+
+    def set_output(self, pin):
+        machine.Pin(pin, machine.Pin.OUT)
+        
+    def set_highz(self, pin):
+        machine.Pin(pin, machine.Pin.OPEN_DRAIN)
+
 
 class GcRGBLED():
     
     def __init__(self, brightness = 0.01):
-        
         PIN = machine.Pin(23,machine.Pin.PULL_DOWN)  # GPIO-Pin, an dem die Datenleitung der WS2812 angeschlossen ist
         self._brightness = brightness
         self._led = neopixel.NeoPixel(PIN, 1, bpp=3)
+        self._lastcolor = array.array('i',[0,0,0])
 
+    # Funktion zum setzen der Helligkeit
+    def setbrightness(self, brightness):
+        self._brightness = brightness
+        self.setcolor(self, self._lastcolor[0], self._lastcolor[1], self._lastcolor[2])
 
     # Funktion zum Setzen einer Farbe auf der LED
     def setcolor(self,red, green, blue):
         self._led[0] = (int(round(red*self._brightness)), int(round(green*self._brightness)), int(round(blue*self._brightness)))
         self._led.write()
+        self._lastcolor[0] = red
+        self._lastcolor[1] = green
+        self._lastcolor[2] = blue
     
     # Funktion zum Ausschalten der LED
     def off(self):
         self._led[0] = (0,0,0)
         self._led.write()
+        self._lastcolor[0] = 0
+        self._lastcolor[1] = 0
+        self._lastcolor[2] = 0
     
     # Funktion für Weiße Farbe
     def white(self):
         self._led[0] = (255,255,255)
         self._led.write()
+        self._lastcolor[0] = 255
+        self._lastcolor[1] = 255
+        self._lastcolor[2] = 255
         
     # Testfunktion
     def test(self):
@@ -275,14 +372,18 @@ class GcRGBLED():
         self.setcolor(255,3,190) # Pink
         time.sleep(0.5)
         
-        #Loop durch viele Farben	-> Tipp: Nicht in die LED schauen sonst blind
+        #Loop durch viele Farben -> Tipp: Nicht in die LED schauen sonst blind
         for x in range(5):
             for y in range(5):
                 for z in range(5):
                     self.setcolor(x*50,y*50,z*50)
                     time.sleep(0.06)
         self.off()
-        
+   
+   
+   
+   
+   
 # ST7789 commands
 _ST7789_SWRESET = b"\x01"
 _ST7789_SLPIN = b"\x10"
