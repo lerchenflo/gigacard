@@ -6,7 +6,8 @@ import machine
 import time
 import utime
 import array
-
+from math import sin, cos
+import math
 #from rotary import Rotary
 from machine import Pin, SPI
 #from ST7789 import ST7789
@@ -18,7 +19,7 @@ from fonts import vga1_16x32 as font2
 
 
 # import for ST7789 driver
-from math import sin, cos
+
 try:
     from time import sleep_ms
 except ImportError:
@@ -94,12 +95,18 @@ class Gigacard():
         self._ADC = GcADC()
         self._DAC = GcDAC()
         self._RGBLED = GcRGBLED()
+        self._IO = GcIO()
         print("Gigacard init fertig")
         
 
     def selftest(self):
+        self._display.selftest()
+        self.printf("RGB - LED - Test:")
         self._RGBLED.test()
+        self.printf("LED - Test:")
         self.LEDtest()
+        self.printf("DAC - Test:")
+        self._DAC.generate_sinus(duration=100)
         
 
     #Testfunktion für die RGB - LED
@@ -121,6 +128,16 @@ class Gigacard():
                 time.sleep(0.2)  # Warte für eine Sekunde
                 led.off()  # Schalte die LED aus
 
+    #Display
+    def cleardisplay(self):
+        self._display.clear()
+        
+    def printf(self,text):
+        self._display.print_display(text)
+        
+    def printf_xy(self,x, y, text):
+        self._display.print_display_xy(x, y, text)
+
 class Gcdisplay():
     #global st7789
     global linepx
@@ -140,6 +157,13 @@ class Gcdisplay():
         
     def print_display_xy(self, x, y, text):
         self.st7789.text(font1, text, y, x)
+        
+    def clear(self):
+        self.st7789.clear()
+        
+    def selftest(self):
+        self.print_display("test")
+        
 
 class Gcrotaryenc():
     global counter
@@ -246,45 +270,80 @@ class GcDAC():
         self.dac_cs.value(0)  # Set CS low to enable communication
         self.spi.write(bytes([(command >> 8) & 0xFF, command & 0xFF]))  # Send command bytes
         self.dac_cs.value(1)  # Set CS high to end communication
-        
-    
-    def generate_sinus(self, amplitude = 1, frequency = 50, duration = 20): # Amplitude in Volt, frequenz in Hertz, Dauer in Sekunden
+
+
+    def generate_sinus(self, amplitude=1, frequency=100, duration=30, sample_rate=2000, offset=0):
         self._amplitude = amplitude
         self._frequency = frequency
         self._duration = duration
-        self._sample_rate = 1000 # Samples pro Sekunde
-        self._period = 1.0 / frequency # Periodendauer als Float
-        self._samplecount = int(sample_rate * period) #Anzahl von Samples insgesammt
-        self.start_time = time.ticks_ms()
-        
-        while time.ticks_diff(time.ticks_ms(), self.start_time) < duration * 1000:
-            for i in range(sample_count):
-                angle = 2 * math.pi * i / sample_count
-                voltage = (amplitude / 2) * (1 + math.sin(angle))  # Offset hinzugefügt, um positive Spannung zu haben
-                self.set_voltage(voltage)
-                time.sleep(1 / sample_rate)
-    
+        self._sample_rate = sample_rate
+        self._offset = offset
+        self._period = 1.0 / frequency
+        self._samplecount = int(self._sample_rate * self._period)
+        self.start_time = time.ticks_us()
+
+        while time.ticks_diff(time.ticks_us(), self.start_time) < self._duration * 1_000_000:
+            for i in range(self._samplecount):
+                angle = 2 * math.pi * i / self._samplecount
+                voltage = (self._amplitude / 2) * (1 + math.sin(angle)) + self._offset  # Offset hinzugefügt, um positive Spannung zu haben
+                self.set_voltage(0, voltage)
+                time.sleep(1 / self._sample_rate)
+
     def generate_sawtooth(self, amplitude=1, frequency=50, duration=20):
         self._amplitude = amplitude
         self._frequency = frequency
         self._duration = duration
-        self._sample_rate = 1000  # Samples pro Sekunde
-        self._period = 1.0 / frequency  # Periodendauer als Float
-        self._sample_count = int(self._sample_rate * self._period)  # Anzahl von Samples insgesamt
-        self.start_time = time.ticks_ms()
-        
-        while time.ticks_diff(time.ticks_ms(), self.start_time) < duration * 1000:
+        self._sample_rate = 1000
+        self._period = 1.0 / frequency
+        self._sample_count = int(self._sample_rate * self._period)
+        self.start_time = time.ticks_us()
+
+        while time.ticks_diff(time.ticks_us(), self.start_time) < duration * 1_000_000:
             for i in range(self._sample_count):
                 voltage = (amplitude / self._sample_count) * i  # Lineare Zunahme von 0 bis Amplitude
-                self.set_voltage(voltage)
+                self.set_voltage(0, voltage)
                 time.sleep(1 / self._sample_rate)
-    
+
     def generate_pwm(self, amplitude=1, frequency=50, duration=20, dutycycle=50):
+        if dutycycle > 100 or dutycycle < 0:
+            raise ValueError("Impossible Dutycycle")
+        
+        
         self._amplitude = amplitude
         self._frequency = frequency
         self._duration = duration
         self._dutycycle = dutycycle
-        self.start_time = time.ticks_ms()
+        self._period = 1 / frequency
+        self.start_time = time.ticks_us()
+        self.ontime = self._period * (dutycycle / 100) * 1_000_000  # in Mikrosekunden
+        self.offtime = self._period * ((100 - dutycycle) / 100) * 1_000_000  # in Mikrosekunden
+
+        while time.ticks_diff(time.ticks_us(), self.start_time) < self._duration * 1_000_000:
+            #Wenn dutycycle 100 oder 0 ist
+            if self._dutycycle == 100:
+                self.set_voltage(0, self._amplitude)
+            elif self._dutycycle == 0:
+                self.set_voltage(0, 0)
+            else:
+                cycle_start_time = time.ticks_us()
+            
+                # Set voltage to high (amplitude)
+                self.set_voltage(0, self._amplitude)
+                # Wait for ontime duration
+                while time.ticks_diff(time.ticks_us(), cycle_start_time) < self.ontime:
+                    pass
+            
+                cycle_start_time = time.ticks_us()
+            
+                # Set voltage to low (0)
+                self.set_voltage(0, 0)
+                # Wait for offtime duration
+                while time.ticks_diff(time.ticks_us(), cycle_start_time) < self.offtime:
+                    pass
+            
+            
+            
+        
     
     
         
