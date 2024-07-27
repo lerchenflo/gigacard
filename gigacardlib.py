@@ -89,6 +89,7 @@ class Gigacard():
         
         
         #Rotary Encoder Library initialisieren
+        
         self._rotaryenc = Gcrotaryenc()
         self._rotaryenc.startlistening()
         self._display = Gcdisplay()
@@ -225,7 +226,7 @@ class GcADC():
         
 class GcDAC():
     def __init__(self):
-        self.spi = SPI(0, baudrate=1000000, sck=Pin(dac_SCK, Pin.OUT), mosi=Pin(dac_SDI, Pin.OUT))
+        self.spi = SPI(0, baudrate=400000, sck=Pin(dac_SCK, Pin.OUT), mosi=Pin(dac_SDI, Pin.OUT))
         # Define DAC chip select pin
         self.dac_cs = Pin(dac_CS, Pin.OUT)
         
@@ -394,7 +395,7 @@ class GcRGBLED():
     # Funktion zum setzen der Helligkeit
     def setbrightness(self, brightness):
         self._brightness = brightness
-        self.setcolor(self, self._lastcolor[0], self._lastcolor[1], self._lastcolor[2])
+        self.setcolor(self._lastcolor[0], self._lastcolor[1], self._lastcolor[2])
 
     # Funktion zum Setzen einer Farbe auf der LED
     def setcolor(self,red, green, blue):
